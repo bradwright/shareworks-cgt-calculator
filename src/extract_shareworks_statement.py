@@ -12,7 +12,6 @@ from pathlib import Path
 from pypdf import PdfReader
 
 
-PDF_PATH = Path("/Users/bradwright/Downloads/statement.pdf")
 OUT_DIR = Path("outputs")
 TEXT_PATH = Path("work/statement_raw_text.txt")
 FX_CACHE_PATH = Path("work/frankfurter_usd_gbp_rates.json")
@@ -29,9 +28,12 @@ def parse_args() -> argparse.Namespace:
         description="Extract Shareworks RSU activity into CGT calculator-ready spreadsheet rows."
     )
     parser.add_argument(
+        "--shareworks-report",
+        "--in",
         "--pdf",
+        dest="pdf",
         type=Path,
-        default=PDF_PATH,
+        required=True,
         help="Path to the Shareworks statement PDF.",
     )
     parser.add_argument(
@@ -39,6 +41,11 @@ def parse_args() -> argparse.Namespace:
         type=Path,
         default=OUT_DIR,
         help="Directory for generated CSV/audit files.",
+    )
+    parser.add_argument(
+        "--out",
+        type=Path,
+        help="Optional output path for the generated rows CSV.",
     )
     parser.add_argument(
         "--work-dir",
@@ -425,17 +432,17 @@ def sort_key(row: dict[str, str]) -> tuple[str, int, int, str]:
 
 
 def main() -> None:
-    global PDF_PATH, OUT_DIR, TEXT_PATH, FX_CACHE_PATH
+    global OUT_DIR, TEXT_PATH, FX_CACHE_PATH
 
     args = parse_args()
-    PDF_PATH = args.pdf
+    pdf_path = args.pdf
     OUT_DIR = args.outputs_dir
     TEXT_PATH = args.work_dir / "statement_raw_text.txt"
     FX_CACHE_PATH = args.work_dir / "frankfurter_usd_gbp_rates.json"
 
     OUT_DIR.mkdir(exist_ok=True)
     TEXT_PATH.parent.mkdir(exist_ok=True)
-    reader = PdfReader(str(PDF_PATH))
+    reader = PdfReader(str(pdf_path))
     text = clean_text("\n\n".join((page.extract_text() or "") for page in reader.pages))
     TEXT_PATH.write_text(text, encoding="utf-8")
 
@@ -464,9 +471,10 @@ def main() -> None:
         for row in rows
     ]
 
-    csv_path = OUT_DIR / "shareworks_extracted_rows.csv"
+    csv_path = args.out or OUT_DIR / "shareworks_extracted_rows.csv"
     audit_path = OUT_DIR / "shareworks_extraction_audit.csv"
 
+    csv_path.parent.mkdir(parents=True, exist_ok=True)
     with csv_path.open("w", encoding="utf-8", newline="") as handle:
         writer = csv.DictWriter(handle, fieldnames=public_fieldnames)
         writer.writeheader()

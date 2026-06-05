@@ -1,20 +1,48 @@
 # CGT Calculator Data Extractor
 
-Extract Shareworks RSU activity from a statement PDF into spreadsheet rows that match the Google Sheet `activity` tab used for UK CGT calculations.
+Extract Shareworks RSU activity from a downloaded statement PDF into CSV rows that match the Google Sheet `activity!A:K` shape used for UK CGT calculations.
 
-This project was created from a Codex working session so the extraction logic can be version controlled and iterated safely.
+The Python code is local-only: it parses a PDF and writes CSV files. It does not authenticate to Google or upload to Google Sheets.
 
-## Source Documents
+## Usage
 
-- Instructions doc: <https://docs.google.com/document/d/1Y7aF80MGaLZW8qjVi8bAjZ6RW5UWLRhMkOJ7BYFGDiY/edit?tab=t.0#heading=h.szqafsxp1zr1>
-- Working Google Sheet: <https://docs.google.com/spreadsheets/d/1MlPi94AqW5Ua5zPn5jPh_q_BiyeZnGc20SKyvWy9Skg/edit>
-- `activity` tab: <https://docs.google.com/spreadsheets/d/1MlPi94AqW5Ua5zPn5jPh_q_BiyeZnGc20SKyvWy9Skg/edit?gid=684371624#gid=684371624>
-- `Codex` comparison tab: <https://docs.google.com/spreadsheets/d/1MlPi94AqW5Ua5zPn5jPh_q_BiyeZnGc20SKyvWy9Skg/edit?gid=896751152#gid=896751152>
-- Test PDF used during development: `/Users/bradwright/Downloads/statement.pdf`
+Run from the project root:
 
-## Current Output Shape
+```bash
+uv run python src/extract_shareworks_statement.py --in ~/Downloads/statement.pdf
+```
 
-The extractor currently writes rows matching `activity!A:K`:
+By default this writes:
+
+- `outputs/shareworks_extracted_rows.csv`
+- `outputs/shareworks_extraction_audit.csv`
+
+Use `--out` to choose the rows CSV path:
+
+```bash
+uv run python src/extract_shareworks_statement.py \
+  --in ~/Downloads/statement.pdf \
+  --out my-rsu-activity.csv
+```
+
+Scratch files and the Frankfurter USD-to-GBP FX cache are written to `work/`.
+
+The cache file is intentionally ignored by git. If it is absent, the script fetches historical rates from Frankfurter. Network access is required for uncached rates.
+
+## Google Sheets
+
+To use the output in Google Sheets, paste `shareworks_extracted_rows.csv` into the target tab starting at `A1`.
+
+If you want an agent to load the CSV for you, point it at this repository's [AGENTS.md](AGENTS.md). The agent instructions describe the upload and formatting workflow:
+
+- clear target `A:K`
+- paste the CSV at `A1`
+- freeze row `1`
+- format columns `A` and `K` as monospace
+
+## Output Shape
+
+The extractor writes rows matching `activity!A:K`:
 
 - `ID`
 - `Date`
@@ -27,75 +55,6 @@ The extractor currently writes rows matching `activity!A:K`:
 - `GBP Price`
 - `GBP Fees`
 - `CGT Calculator String`
-
-## ETL Workflow
-
-Run the full ETL from the project root:
-
-```bash
-uv run python src/run_etl.py --pdf ~/Downloads/statement.pdf
-```
-
-This runs:
-
-- Extract/Transform: parse the Shareworks PDF and generate local CSV files.
-- Load: upload `outputs/shareworks_extracted_rows.csv` into the configured Google Sheet tab.
-
-To run only Extract/Transform:
-
-```bash
-uv run python src/run_etl.py --pdf ~/Downloads/statement.pdf --skip-load
-```
-
-By default the ETL loads into the `Codex` tab in the working spreadsheet. You can override the destination:
-
-```bash
-uv run python src/run_etl.py \
-  --pdf ~/Downloads/statement.pdf \
-  --spreadsheet 1MlPi94AqW5Ua5zPn5jPh_q_BiyeZnGc20SKyvWy9Skg \
-  --sheet-name Codex
-```
-
-## Stage Commands
-
-Extract/Transform from PDF to CSV:
-
-
-```bash
-uv run python src/extract_shareworks_statement.py --pdf ~/Downloads/statement.pdf
-```
-
-Outputs are written to `outputs/`:
-
-- `shareworks_extracted_rows.csv`
-- `shareworks_extraction_audit.csv`
-
-Scratch files and the Frankfurter USD-to-GBP FX cache are written to `work/`.
-
-The cache file is intentionally ignored by git. If it is absent, the script fetches historical rates from Frankfurter. Network access is required for uncached rates.
-
-Load the generated CSV to the Google Sheet:
-
-```bash
-uv run python src/upload_to_google_sheets.py \
-  --spreadsheet 1MlPi94AqW5Ua5zPn5jPh_q_BiyeZnGc20SKyvWy9Skg \
-  --sheet-name Codex
-```
-
-The uploader clears `A:K` on the target tab, writes the CSV starting at `A1`, freezes the header row, and applies `Roboto Mono` to columns `A` and `K`.
-
-By default the uploader uses Google Application Default Credentials:
-
-```bash
-gcloud auth application-default login \
-  --scopes=https://www.googleapis.com/auth/spreadsheets
-```
-
-You can also pass a service account JSON file:
-
-```bash
-uv run python src/upload_to_google_sheets.py --credentials /path/to/service-account.json
-```
 
 ## Rules Implemented
 
@@ -110,44 +69,22 @@ uv run python src/upload_to_google_sheets.py --credentials /path/to/service-acco
 - `Running total` increments on `Release` rows and decrements on `Sell to Cover` and `Withdrawal` rows.
 - `CGT Calculator String` mirrors the Google Sheets formula from the `activity` tab.
 
-## Google Sheet Formula Copied
+## CGT Calculator String
 
-Column K in `activity` uses this row formula:
+Column K uses this shape:
 
-```gs
-=IF(C2="Release","B","S") & " " & TEXT(B2,"dd/mm/yyyy") & " SHOP " & FIXED(D2, 6, TRUE) & " " & FIXED(I2, 4, TRUE) & " " & FIXED(J2, 2, TRUE) & " 0.00"
+```text
+B|S dd/mm/yyyy SHOP quantity price fees 0.00
 ```
 
-The Python implementation outputs the same shape:
+The Python implementation outputs:
 
 - `B` for `Release`, otherwise `S`
-- Date as `dd/mm/yyyy`
-- Quantity fixed to 6 decimals
+- date as `dd/mm/yyyy`
+- quantity fixed to 6 decimals
 - GBP price fixed to 4 decimals
 - GBP fees fixed to 2 decimals
 - trailing `0.00`
-
-## Work Done So Far
-
-- Read and summarized the Google Doc instructions.
-- Parsed the Shareworks PDF with `pypdf`.
-- Extracted Shareworks `Share Units - Release (...)` sections.
-- Extracted Shareworks `Withdrawal on ...` sections.
-- Generated rows for `Release`, `Sell to Cover`, and `Withdrawal`.
-- Added allowed fee handling:
-  - include brokerage commission
-  - include supplemental transaction fee
-  - exclude wire/EFT transfer fees
-- Fixed withdrawal date handling to use the `Withdrawal on ...` heading date, per the instructions.
-- Added historical USD-to-GBP FX lookup using Frankfurter.
-- Cached FX rates locally in `work/frankfurter_usd_gbp_rates.json`.
-- Added derived columns through `activity!K`:
-  - running total
-  - GBP price
-  - GBP fees
-  - CGT calculator string
-- Added a CSV uploader for writing generated rows into the Google Sheet `Codex` tab.
-- Initialized this git project and committed the first working extractor.
 
 ## Validation Notes
 
@@ -161,42 +98,26 @@ The development statement produced:
 - 100 unique FX lookup dates
 - 0 failed parsed sections
 
-Earlier comparisons against the existing `activity` tab showed:
+## Caveats
 
-- IDs matched for the recent rows present in `activity`.
-- FX rates were close to manually-entered sheet rates, with expected differences from rate source and date policy.
-- Column I/J math behaved like the sheet formulas, with observed differences explained by FX and fee-source differences.
-- Column K was copied from the exact `activity` formula pattern.
-
-## Current Caveats
-
-- Frankfurter is not XE. The instructions mention XE, but this script currently uses Frankfurter because it has a simple historical API. Values are expected to be close but not identical.
+- Frankfurter is not XE. The original instructions mention XE, but this script currently uses Frankfurter because it has a simple historical API. Values are expected to be close but not identical.
 - Frankfurter may return the nearest available published rate for a non-rate day. The audit CSV records the lookup date and returned rate date.
 - The script is tuned to the text layout extracted from the current Shareworks PDF format. If Shareworks changes statement wording or layout, parser patterns may need adjustment.
-- The Google Sheets uploader requires either Application Default Credentials or a service account with access to the target spreadsheet.
 
 ## Dependencies
 
 The script uses:
 
-- `google-api-python-client`
-- `google-auth`
 - `pypdf`
 
-Install them in your preferred Python environment if they are not already available:
+Install dependencies with:
 
 ```bash
 uv sync
 ```
 
-For a plain requirements-based install, `requirements.txt` is also compatible with `uv`:
+For a plain requirements-based install:
 
 ```bash
 uv pip install -r requirements.txt
 ```
-
-## Suggested Next Steps
-
-- Add unit tests with representative snippets from release and withdrawal sections.
-- Add a fixture-based test for the CGT calculator string formatting.
-- Decide whether Frankfurter is acceptable, or whether exact XE parity is required.
