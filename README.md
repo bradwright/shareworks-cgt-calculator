@@ -1,8 +1,13 @@
-# CGT Calculator Data Extractor
+# Shareworks CGT CSV Extractor
 
-Extract Shareworks RSU activity from a downloaded statement PDF into CSV rows that match the Google Sheet `activity!A:K` shape used for UK CGT calculations.
+A local command-line extractor for converting Shareworks RSU statement PDFs into CSV rows suitable for UK capital gains tax workflows and [CGTCalculator](https://www.cgtcalculator.com/calculator.aspx).
 
-The Python code is local-only: it parses a PDF and writes CSV files. It does not authenticate to Google or upload to Google Sheets.
+The extractor parses a downloaded Shareworks statement PDF, writes a transaction CSV, and produces an audit CSV showing how each source section was interpreted. It runs locally and does not authenticate to Google or upload data anywhere.
+
+## Requirements
+
+- Python 3.10 or later
+- [uv](https://docs.astral.sh/uv/)
 
 ## Usage
 
@@ -12,7 +17,7 @@ Run from the project root:
 uv run src/extract_shareworks_statement.py --in ~/Downloads/statement.pdf
 ```
 
-By default this writes:
+By default, this writes:
 
 - `outputs/shareworks_extracted_rows.csv`
 - `outputs/shareworks_extraction_audit.csv`
@@ -27,24 +32,11 @@ uv run src/extract_shareworks_statement.py \
 
 Scratch files and the Frankfurter USD-to-GBP FX cache are written to `work/`.
 
-The cache file is intentionally ignored by git. If it is absent, the script fetches historical rates from Frankfurter. Network access is required for uncached rates.
-
-## Google Sheets
-
-To use the output in Google Sheets, paste `shareworks_extracted_rows.csv` into the target tab starting at `A1`.
-
-If you want an agent to load the CSV for you, point it at this repository's [AGENTS.md](AGENTS.md). The agent instructions describe the upload and formatting workflow:
-
-- read existing target `A:K`
-- use `ID`, `Date`, and `Type` as the row uniqueness key
-- append only rows whose key is not already present
-- leave existing rows unchanged, and never clear the sheet unless explicitly asked
-- freeze row `1`
-- format columns `A` and `K` as monospace
+If the cache is absent, the script fetches historical rates from Frankfurter. Network access is required for uncached rates.
 
 ## Output Shape
 
-The extractor writes rows matching `activity!A:K`:
+The extractor writes the following columns:
 
 - `ID`
 - `Date`
@@ -58,6 +50,8 @@ The extractor writes rows matching `activity!A:K`:
 - `GBP Fees`
 - `CGT Calculator String`
 
+The audit CSV includes parser status, source dates, FX lookup details, parsed quantities, fees, and notes for each Shareworks statement section.
+
 ## Rules Implemented
 
 - Release rows use the Shareworks `Release Date`.
@@ -69,7 +63,7 @@ The extractor writes rows matching `activity!A:K`:
 - `GBP Price = USD Price * FX Rate`.
 - `GBP Fees = USD Fees * FX Rate`; blank USD fees are treated as zero.
 - `Running total` increments on `Release` rows and decrements on `Sell to Cover` and `Withdrawal` rows.
-- `CGT Calculator String` mirrors the Google Sheets formula from the `activity` tab.
+- `CGT Calculator String` is generated directly from the parsed transaction fields.
 
 ## CGT Calculator String
 
@@ -103,21 +97,9 @@ After generating or loading the CSV:
 
 Paste the full history of generated trade lines, not only the rows for a single tax year. CGTCalculator needs the surrounding transactions to apply same-day matching, Section 104 pooling, and the 30-day rule correctly. This is especially important for Shareworks RSUs because `Release` and `Sell to Cover` rows often match on the same day, and sell-to-cover fees can create small losses that would be distorted by rounding.
 
-## Validation Notes
-
-The development statement produced:
-
-- 44 release sections
-- 44 `Release` rows
-- 44 `Sell to Cover` rows
-- 30 `Withdrawal` rows
-- 118 spreadsheet rows
-- 100 unique FX lookup dates
-- 0 failed parsed sections
-
 ## Caveats
 
-- Frankfurter is not XE. The original instructions mention XE, but this script currently uses Frankfurter because it has a simple historical API. Values are expected to be close but not identical.
+- FX rates are sourced from Frankfurter, not XE or HMRC. Values from different providers may be close but not identical.
 - Frankfurter may return the nearest available published rate for a non-rate day. The audit CSV records the lookup date and returned rate date.
 - The script is tuned to the text layout extracted from the current Shareworks PDF format. If Shareworks changes statement wording or layout, parser patterns may need adjustment.
 
@@ -128,3 +110,12 @@ The script declares its dependency inline using PEP 723 script metadata:
 - `pypdf`
 
 `uv run src/extract_shareworks_statement.py ...` reads that metadata and creates the required environment automatically.
+
+## Appendix: Google Sheets
+
+The extractor does not contain Google API credentials, Google client dependencies, or upload logic. If you want the output in Google Sheets, use one of these workflows:
+
+- Import or paste `shareworks_extracted_rows.csv` into a sheet starting at `A1`.
+- Ask an agent with Google Sheets access to load the generated CSV for you.
+
+When using an agent-assisted load, a good workflow is to append only missing rows, using `ID`, `Date`, and `Type` as the uniqueness key. Existing rows should be left unchanged unless you explicitly want a full replacement load.
