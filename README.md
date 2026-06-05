@@ -33,7 +33,7 @@ The extractor currently writes rows matching `activity!A:K`:
 Run from the project root:
 
 ```bash
-python3 src/extract_shareworks_statement.py --pdf ~/Downloads/statement.pdf
+uv run python src/extract_shareworks_statement.py --pdf ~/Downloads/statement.pdf
 ```
 
 Outputs are written to `outputs/`:
@@ -135,7 +135,13 @@ The script uses:
 Install them in your preferred Python environment if they are not already available:
 
 ```bash
-python3 -m pip install -r requirements.txt
+uv sync
+```
+
+For a plain requirements-based install, `requirements.txt` is also compatible with `uv`:
+
+```bash
+uv pip install -r requirements.txt
 ```
 
 ## Suggested Next Steps
