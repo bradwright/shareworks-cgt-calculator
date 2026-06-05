@@ -4,8 +4,8 @@ version = "0.1.0"
 description = "Extract Shareworks RSU activity into CGT calculator-ready spreadsheet rows."
 requires-python = ">=3.10"
 dependencies = [
-    "openpyxl",
-    "pandas",
+    "google-api-python-client",
+    "google-auth",
     "pypdf",
 ]
 

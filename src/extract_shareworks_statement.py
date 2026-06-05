@@ -9,7 +9,6 @@ from datetime import datetime
 from decimal import Decimal, ROUND_HALF_UP
 from pathlib import Path
 
-import pandas as pd
 from pypdf import PdfReader
 
 
@@ -39,7 +38,7 @@ def parse_args() -> argparse.Namespace:
         "--outputs-dir",
         type=Path,
         default=OUT_DIR,
-        help="Directory for generated CSV/XLSX/audit files.",
+        help="Directory for generated CSV/audit files.",
     )
     parser.add_argument(
         "--work-dir",
@@ -466,7 +465,6 @@ def main() -> None:
     ]
 
     csv_path = OUT_DIR / "shareworks_extracted_rows.csv"
-    xlsx_path = OUT_DIR / "shareworks_extracted_rows.xlsx"
     audit_path = OUT_DIR / "shareworks_extraction_audit.csv"
 
     with csv_path.open("w", encoding="utf-8", newline="") as handle:
@@ -499,17 +497,12 @@ def main() -> None:
         writer.writeheader()
         writer.writerows(audit)
 
-    with pd.ExcelWriter(xlsx_path, engine="openpyxl") as writer:
-        pd.DataFrame(public_rows).to_excel(writer, index=False, sheet_name="Extracted Rows")
-        pd.DataFrame(audit).to_excel(writer, index=False, sheet_name="Audit")
-
     print(f"pages={len(reader.pages)}")
     print(f"release_sections={len(release_audit)}")
     print(f"withdrawal_sections={len(withdrawal_audit)}")
     print(f"spreadsheet_rows={len(rows)}")
     print(f"fx_rates={len({row['_fx_lookup_date'] for row in rows})}")
     print(f"rows_csv={csv_path}")
-    print(f"rows_xlsx={xlsx_path}")
     print(f"audit_csv={audit_path}")
     failed = [row for row in audit if row["status"] != "ok"]
     print(f"failed_sections={len(failed)}")

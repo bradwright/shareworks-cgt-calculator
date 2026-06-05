@@ -28,9 +28,38 @@ The extractor currently writes rows matching `activity!A:K`:
 - `GBP Fees`
 - `CGT Calculator String`
 
-## Workflow
+## ETL Workflow
 
-Run from the project root:
+Run the full ETL from the project root:
+
+```bash
+uv run python src/run_etl.py --pdf ~/Downloads/statement.pdf
+```
+
+This runs:
+
+- Extract/Transform: parse the Shareworks PDF and generate local CSV files.
+- Load: upload `outputs/shareworks_extracted_rows.csv` into the configured Google Sheet tab.
+
+To run only Extract/Transform:
+
+```bash
+uv run python src/run_etl.py --pdf ~/Downloads/statement.pdf --skip-load
+```
+
+By default the ETL loads into the `Codex` tab in the working spreadsheet. You can override the destination:
+
+```bash
+uv run python src/run_etl.py \
+  --pdf ~/Downloads/statement.pdf \
+  --spreadsheet 1MlPi94AqW5Ua5zPn5jPh_q_BiyeZnGc20SKyvWy9Skg \
+  --sheet-name Codex
+```
+
+## Stage Commands
+
+Extract/Transform from PDF to CSV:
+
 
 ```bash
 uv run python src/extract_shareworks_statement.py --pdf ~/Downloads/statement.pdf
@@ -39,12 +68,34 @@ uv run python src/extract_shareworks_statement.py --pdf ~/Downloads/statement.pd
 Outputs are written to `outputs/`:
 
 - `shareworks_extracted_rows.csv`
-- `shareworks_extracted_rows.xlsx`
 - `shareworks_extraction_audit.csv`
 
 Scratch files and the Frankfurter USD-to-GBP FX cache are written to `work/`.
 
 The cache file is intentionally ignored by git. If it is absent, the script fetches historical rates from Frankfurter. Network access is required for uncached rates.
+
+Load the generated CSV to the Google Sheet:
+
+```bash
+uv run python src/upload_to_google_sheets.py \
+  --spreadsheet 1MlPi94AqW5Ua5zPn5jPh_q_BiyeZnGc20SKyvWy9Skg \
+  --sheet-name Codex
+```
+
+The uploader clears `A:K` on the target tab, writes the CSV starting at `A1`, freezes the header row, and applies `Roboto Mono` to columns `A` and `K`.
+
+By default the uploader uses Google Application Default Credentials:
+
+```bash
+gcloud auth application-default login \
+  --scopes=https://www.googleapis.com/auth/spreadsheets
+```
+
+You can also pass a service account JSON file:
+
+```bash
+uv run python src/upload_to_google_sheets.py --credentials /path/to/service-account.json
+```
 
 ## Rules Implemented
 
@@ -95,7 +146,7 @@ The Python implementation outputs the same shape:
   - GBP price
   - GBP fees
   - CGT calculator string
-- Pasted generated rows into the Google Sheet `Codex` tab for visual comparison.
+- Added a CSV uploader for writing generated rows into the Google Sheet `Codex` tab.
 - Initialized this git project and committed the first working extractor.
 
 ## Validation Notes
@@ -122,14 +173,14 @@ Earlier comparisons against the existing `activity` tab showed:
 - Frankfurter is not XE. The instructions mention XE, but this script currently uses Frankfurter because it has a simple historical API. Values are expected to be close but not identical.
 - Frankfurter may return the nearest available published rate for a non-rate day. The audit CSV records the lookup date and returned rate date.
 - The script is tuned to the text layout extracted from the current Shareworks PDF format. If Shareworks changes statement wording or layout, parser patterns may need adjustment.
-- The Google Sheet paste step is not automated in this repository yet; it has been done through the Codex Google Drive connector during development.
+- The Google Sheets uploader requires either Application Default Credentials or a service account with access to the target spreadsheet.
 
 ## Dependencies
 
 The script uses:
 
-- `pandas`
-- `openpyxl`
+- `google-api-python-client`
+- `google-auth`
 - `pypdf`
 
 Install them in your preferred Python environment if they are not already available:
@@ -146,7 +197,6 @@ uv pip install -r requirements.txt
 
 ## Suggested Next Steps
 
-- Add an automated Google Sheets upload/update command if this should become more than a local extractor.
 - Add unit tests with representative snippets from release and withdrawal sections.
 - Add a fixture-based test for the CGT calculator string formatting.
 - Decide whether Frankfurter is acceptable, or whether exact XE parity is required.
