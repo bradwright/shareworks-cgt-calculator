@@ -9,6 +9,20 @@ The extractor parses a downloaded Shareworks statement PDF, writes a transaction
 - Python 3.10 or later
 - [uv](https://docs.astral.sh/uv/)
 
+## Getting the Shareworks PDF
+
+Download a Shareworks statement PDF before running the extractor:
+
+1. Sign in to Shareworks or Morgan Stanley at Work.
+2. Open `Activity` -> `Reports` -> `Account Summary`.
+3. Set `Period Quick Select` to `All Available History`.
+4. Under `Product Selection`, select both `Share Purchase and Holdings` and `Stock Options and Awards`. These are often selected by default.
+5. Under `View As`, select `PDF` and `A4`.
+6. Under `Account Summary Type`, select `Full`. This is often selected by default.
+7. Submit the report and save the generated PDF locally.
+
+Shareworks labels and navigation vary between employers and account migrations. The important part is to download the detailed statement PDF that includes release, sell-to-cover, withdrawal, settlement, fee, and price details.
+
 ## Usage
 
 Run from the project root:
