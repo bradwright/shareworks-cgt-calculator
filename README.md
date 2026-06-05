@@ -88,6 +88,21 @@ The Python implementation outputs:
 - GBP fees fixed to 2 decimals
 - trailing `0.00`
 
+## Using CGTCalculator
+
+This project prepares the trade lines for [CGTCalculator](https://www.cgtcalculator.com/calculator.aspx); it does not calculate your final UK CGT liability itself.
+
+After generating or loading the CSV:
+
+1. Copy every value from column `K` (`CGT Calculator String`), excluding the header.
+2. Open [CGTCalculator](https://www.cgtcalculator.com/calculator.aspx).
+3. Paste the copied lines into the trades text area.
+4. Optionally click `Format/Sort`.
+5. Make sure `Apply rounding` is unchecked.
+6. Click `CALCULATE`.
+
+Paste the full history of generated trade lines, not only the rows for a single tax year. CGTCalculator needs the surrounding transactions to apply same-day matching, Section 104 pooling, and the 30-day rule correctly. This is especially important for Shareworks RSUs because `Release` and `Sell to Cover` rows often match on the same day, and sell-to-cover fees can create small losses that would be distorted by rounding.
+
 ## Validation Notes
 
 The development statement produced:
