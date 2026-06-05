@@ -7,7 +7,7 @@ This repository is a local Shareworks PDF to CSV extractor. Do not add Google AP
 Use the Python script to generate CSV output:
 
 ```bash
-uv run python src/extract_shareworks_statement.py --in /path/to/shareworks-statement.pdf
+uv run src/extract_shareworks_statement.py --in /path/to/shareworks-statement.pdf
 ```
 
 Use `--out /path/to/output.csv` when the user wants a specific CSV path. If `--out` is omitted, the rows CSV is written to `outputs/shareworks_extracted_rows.csv`.

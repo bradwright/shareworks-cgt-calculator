@@ -9,7 +9,7 @@ The Python code is local-only: it parses a PDF and writes CSV files. It does not
 Run from the project root:
 
 ```bash
-uv run python src/extract_shareworks_statement.py --in ~/Downloads/statement.pdf
+uv run src/extract_shareworks_statement.py --in ~/Downloads/statement.pdf
 ```
 
 By default this writes:
@@ -20,7 +20,7 @@ By default this writes:
 Use `--out` to choose the rows CSV path:
 
 ```bash
-uv run python src/extract_shareworks_statement.py \
+uv run src/extract_shareworks_statement.py \
   --in ~/Downloads/statement.pdf \
   --out my-rsu-activity.csv
 ```
@@ -106,18 +106,8 @@ The development statement produced:
 
 ## Dependencies
 
-The script uses:
+The script declares its dependency inline using PEP 723 script metadata:
 
 - `pypdf`
 
-Install dependencies with:
-
-```bash
-uv sync
-```
-
-For a plain requirements-based install:
-
-```bash
-uv pip install -r requirements.txt
-```
+`uv run src/extract_shareworks_statement.py ...` reads that metadata and creates the required environment automatically.
