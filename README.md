@@ -35,8 +35,10 @@ To use the output in Google Sheets, paste `shareworks_extracted_rows.csv` into t
 
 If you want an agent to load the CSV for you, point it at this repository's [AGENTS.md](AGENTS.md). The agent instructions describe the upload and formatting workflow:
 
-- clear target `A:K`
-- paste the CSV at `A1`
+- read existing target `A:K`
+- use `ID`, `Date`, and `Type` as the row uniqueness key
+- append only rows whose key is not already present
+- leave existing rows unchanged, and never clear the sheet unless explicitly asked
 - freeze row `1`
 - format columns `A` and `K` as monospace
 

@@ -22,14 +22,21 @@ For a target Google Sheets URL with a tab `gid`:
 
 1. Resolve the spreadsheet ID and target sheet/tab from the URL.
 2. Read the generated rows CSV.
-3. Clear the target tab range `A:K`.
-4. Paste/write the CSV rows starting at `A1`.
-5. Freeze row `1`.
-6. Apply monospace font formatting to columns `A` and `K`.
+3. Read the existing target tab range `A:K`.
+4. Ensure row `1` contains the CSV header. If the sheet is empty, write the header to `A1:K1`.
+5. Build a uniqueness key from columns `A:C`: `ID`, `Date`, and `Type`.
+6. For each CSV data row:
+   - If the `A:C` key is not present in the sheet, append the row to the first empty row.
+   - If the `A:C` key is already present, leave the existing row unchanged.
+   - If duplicate `A:C` keys already exist in the sheet, stop and report the duplicate keys instead of writing.
+7. Do not clear or overwrite the full target range unless the user explicitly asks for a full replacement load.
+8. Freeze row `1`.
+9. Apply monospace font formatting to columns `A` and `K`.
    - Use `Roboto Mono` when available.
-7. Verify:
+10. Verify:
    - `A1:K1` matches the CSV header.
-   - The loaded row count equals the CSV row count.
-   - A final-row sentinel matches the CSV final row.
+   - Every CSV data row has exactly one matching sheet row by the `A:C` key.
+   - The sheet has no duplicate `A:C` keys.
+   - The number of appended rows equals the number of CSV keys that were not already present before the load.
 
 Do not require or set up Google Application Default Credentials for this repository. Google access belongs to the requesting user's agent/session.
