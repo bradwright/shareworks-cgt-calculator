@@ -1,13 +1,17 @@
 # Agent Instructions
 
-This repository is a local Shareworks PDF to CSV extractor. Do not add Google API credentials, Google client dependencies, or direct Google Sheets upload logic to the Python code.
+This repository is a local Shareworks PDF or saved Account Summary HTML to CSV extractor. Do not add Google API credentials, Google client dependencies, or direct Google Sheets upload logic to the Python code.
 
 ## Local Extraction
 
-Use the Python script to generate CSV output:
+Use the Python script to generate CSV output from a Shareworks PDF or saved classic Account Summary HTML file:
 
 ```bash
 uv run src/extract_shareworks_statement.py --in /path/to/shareworks-statement.pdf
+```
+
+```bash
+uv run src/extract_shareworks_statement.py --in /path/to/shareworks-account-summary.htm
 ```
 
 Use `--out /path/to/output.csv` when the user wants a specific CSV path. If `--out` is omitted, the rows CSV is written to `outputs/shareworks_extracted_rows.csv`.

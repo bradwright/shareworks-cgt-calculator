@@ -1,27 +1,40 @@
 # Shareworks CGT CSV Extractor
 
-A local command-line extractor for converting Shareworks RSU statement PDFs into CSV rows suitable for UK capital gains tax workflows and [CGTCalculator](https://www.cgtcalculator.com/calculator.aspx).
+A local command-line extractor for converting Shareworks RSU statement PDFs or saved Account Summary HTML pages into CSV rows suitable for UK capital gains tax workflows and [CGTCalculator](https://www.cgtcalculator.com/calculator.aspx).
 
-The extractor parses a downloaded Shareworks statement PDF, writes a transaction CSV, and produces an audit CSV showing how each source section was interpreted. It runs locally and does not authenticate to Google or upload data anywhere.
+The extractor parses a downloaded Shareworks statement PDF or a saved classic Account Summary HTML page, writes a transaction CSV, and produces an audit CSV showing how each source section was interpreted. It runs locally and does not authenticate to Google or upload data anywhere.
 
 ## Requirements
 
 - Python 3.10 or later
 - [uv](https://docs.astral.sh/uv/)
 
-## Getting the Shareworks PDF
+## Getting the Shareworks Report
 
-Download a Shareworks statement PDF before running the extractor:
+Download a Shareworks statement PDF or save the classic Account Summary HTML page before running the extractor:
 
 1. Sign in to Shareworks or Morgan Stanley at Work.
 2. Open `Activity` -> `Reports` -> `Account Summary`.
 3. Set `Period Quick Select` to `All Available History`.
 4. Under `Product Selection`, select both `Share Purchase and Holdings` and `Stock Options and Awards`. These are often selected by default.
-5. Under `View As`, select `PDF` and `A4`.
-6. Under `Account Summary Type`, select `Full`. This is often selected by default.
-7. Submit the report and save the generated PDF locally.
+5. Under `Account Summary Type`, select `Full`. This is often selected by default.
 
-Shareworks labels and navigation vary between employers and account migrations. The important part is to download the detailed statement PDF that includes release, sell-to-cover, withdrawal, settlement, fee, and price details.
+For PDF extraction:
+
+1. Under `View As`, select `PDF` and `A4`.
+2. Submit the report and save the generated PDF locally.
+
+For HTML extraction:
+
+1. Under `View As`, select `Web Page`.
+2. Submit the report.
+3. Save the rendered report page from the browser.
+4. In the browser save dialog, set `Format` to `Webpage, Complete`.
+5. Save the `.htm` file and its accompanying `_files` folder together, usually into `Downloads`.
+
+For HTML extraction, the saved file should be named like `Morgan Stanley at Work - Account Summary.htm` and should contain the rendered classic `userStatement.do` report tables. A saved single-page app shell with only an `app-mount` element is not enough.
+
+Shareworks labels and navigation vary between employers and account migrations. The important part is to download or save the detailed statement that includes release, sell-to-cover, withdrawal, settlement, fee, and price details.
 
 ## Usage
 
@@ -29,6 +42,12 @@ Run from the project root:
 
 ```bash
 uv run src/extract_shareworks_statement.py --in ~/Downloads/statement.pdf
+```
+
+Saved HTML reports are also supported:
+
+```bash
+uv run src/extract_shareworks_statement.py --in ~/Downloads/account-summary.htm
 ```
 
 By default, this writes:
@@ -115,7 +134,8 @@ Paste the full history of generated trade lines, not only the rows for a single 
 
 - FX rates are sourced from Frankfurter, not XE or HMRC. Values from different providers may be close but not identical.
 - Frankfurter may return the nearest available published rate for a non-rate day. The audit CSV records the lookup date and returned rate date.
-- The script is tuned to the text layout extracted from the current Shareworks PDF format. If Shareworks changes statement wording or layout, parser patterns may need adjustment.
+- The PDF parser is tuned to the text layout extracted from the current Shareworks PDF format. If Shareworks changes statement wording or layout, parser patterns may need adjustment.
+- The HTML parser expects the classic saved Account Summary report tables, not the modern Morgan Stanley at Work web-app bootstrap page.
 
 ## Dependencies
 
