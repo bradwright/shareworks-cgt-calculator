@@ -41,13 +41,17 @@ Shareworks labels and navigation vary between employers and account migrations. 
 Run from the project root:
 
 ```bash
-uv run src/extract_shareworks_statement.py --in ~/Downloads/statement.pdf
+uv run src/extract_shareworks_statement.py \
+  --in ~/Downloads/statement.pdf \
+  --cgt-symbol SYMBOL
 ```
 
 Saved HTML reports are also supported:
 
 ```bash
-uv run src/extract_shareworks_statement.py --in ~/Downloads/account-summary.htm
+uv run src/extract_shareworks_statement.py \
+  --in ~/Downloads/account-summary.htm \
+  --cgt-symbol SYMBOL
 ```
 
 By default, this writes:
@@ -55,11 +59,14 @@ By default, this writes:
 - `outputs/shareworks_extracted_rows.csv`
 - `outputs/shareworks_extraction_audit.csv`
 
+The command prints `cgt_ready=true` only when the extracted transactions reconcile to the statement's independent Activity ledgers, FX enrichment succeeds, and no blocking completeness issue is found. A blocked run exits non-zero, still writes the audit and raw transaction rows, and leaves every FX, GBP, and `CGT Calculator String` value blank. Existing rows output is neutralized before parsing or network work so a failed rerun cannot leave stale CGT lines in place.
+
 Use `--out` to choose the rows CSV path:
 
 ```bash
 uv run src/extract_shareworks_statement.py \
   --in ~/Downloads/statement.pdf \
+  --cgt-symbol SYMBOL \
   --out my-rsu-activity.csv
 ```
 
@@ -83,19 +90,26 @@ The extractor writes the following columns:
 - `GBP Fees`
 - `CGT Calculator String`
 
-The audit CSV includes parser status, source dates, FX lookup details, parsed quantities, fees, and notes for each Shareworks statement section.
+The audit CSV includes parser status, source dates, FX lookup details, parsed quantities, fees, and notes for each Shareworks statement section. It also records opening shares, reported and calculated closing shares, the minimum running balance, and any reconciliation difference.
 
 ## Rules Implemented
 
 - Release rows use the Shareworks `Release Date`.
-- Sell to Cover rows use the release `Settlement Date` for FX lookup.
+- Sell to Cover rows use the Shareworks `Release Date` as both the disposal date and FX lookup date; the later settlement date is retained only for audit and holdings-ledger reconciliation.
 - Withdrawal rows use the `Withdrawal on ...` heading date, not settlement date.
 - Brokerage commission and supplemental transaction fees are included in USD fees.
 - Wire/EFT transfer fees are excluded.
 - FX rates are fetched as GBP per 1 USD from Frankfurter historical rates.
 - `GBP Price = USD Price * FX Rate`.
 - `GBP Fees = USD Fees * FX Rate`; blank USD fees are treated as zero.
-- `Running total` increments on `Release` rows and decrements on `Sell to Cover` and `Withdrawal` rows.
+- `Running total` starts with the statement's Activity-table opening holding, increments on `Release` rows, and decrements on `Sell to Cover` and `Withdrawal` rows.
+- The calculated closing holding must match the Activity-table closing holding within `0.000001` shares.
+- `--cgt-symbol` is required, must be an uppercase one-word identifier, and is emitted only when the statement contains exactly one unique fund.
+- Gross release values and withdrawal gross proceeds must match quantity multiplied by USD unit price within `$0.01`.
+- Holdings Activity releases and sales are independently matched to the detailed release and withdrawal sections; the RSU Activity ledger is also matched so zero-net releases cannot disappear silently.
+- Missing, duplicate, or malformed holding snapshots; negative running holdings; and closing-balance mismatches block CGT-ready output.
+- Unknown Activity rows, missing or extra detail sections, duplicate release IDs, date/quantity mismatches, and FX failures also block CGT-ready output.
+- A non-zero opening holding also blocks CGT-ready output because its original acquisition dates and historic GBP costs are not present in the extracted transactions.
 - `CGT Calculator String` is generated directly from the parsed transaction fields.
 
 ## CGT Calculator String
@@ -103,13 +117,14 @@ The audit CSV includes parser status, source dates, FX lookup details, parsed qu
 Column K uses this shape:
 
 ```text
-B|S dd/mm/yyyy SHOP quantity price fees 0.00
+B|S dd/mm/yyyy SYMBOL quantity price fees 0.00
 ```
 
 The Python implementation outputs:
 
 - `B` for `Release`, otherwise `S`
 - date as `dd/mm/yyyy`
+- the security identifier supplied with `--cgt-symbol`
 - quantity fixed to 6 decimals
 - GBP price fixed to 4 decimals
 - GBP fees fixed to 2 decimals
@@ -119,7 +134,9 @@ The Python implementation outputs:
 
 This project prepares the trade lines for [CGTCalculator](https://www.cgtcalculator.com/calculator.aspx); it does not calculate your final UK CGT liability itself.
 
-After generating or loading the CSV:
+Only continue when the command reports `cgt_ready=true`. If it reports `cgt_ready=false`, inspect the audit CSV and supply the missing acquisition history or correct the source statement before using the trade lines.
+
+After generating a CGT-ready CSV:
 
 1. Copy every value from column `K` (`CGT Calculator String`), excluding the header.
 2. Open [CGTCalculator](https://www.cgtcalculator.com/calculator.aspx).
@@ -130,12 +147,23 @@ After generating or loading the CSV:
 
 Paste the full history of generated trade lines, not only the rows for a single tax year. CGTCalculator needs the surrounding transactions to apply same-day matching, Section 104 pooling, and the 30-day rule correctly. This is especially important for Shareworks RSUs because `Release` and `Sell to Cover` rows often match on the same day, and sell-to-cover fees can create small losses that would be distorted by rounding.
 
+An Activity-table opening market price or book value is not enough to reconstruct a UK CGT acquisition. The extractor uses opening shares only to reconcile the running balance and never invents a synthetic purchase row.
+
 ## Caveats
 
 - FX rates are sourced from Frankfurter, not XE or HMRC. Values from different providers may be close but not identical.
 - Frankfurter may return the nearest available published rate for a non-rate day. The audit CSV records the lookup date and returned rate date.
+- Sell-to-cover handling treats Shareworks `Release Date` as the trade/disposal date because the supported statement supplies no separate trade date. If a transaction confirmation identifies a different contract/trade date, reconcile that source before using the output.
 - The PDF parser is tuned to the text layout extracted from the current Shareworks PDF format. If Shareworks changes statement wording or layout, parser patterns may need adjustment.
 - The HTML parser expects the classic saved Account Summary report tables, not the modern Morgan Stanley at Work web-app bootstrap page.
+
+## Tests
+
+Run the parser and fail-closed regression suite from the project root:
+
+```bash
+uv run --with pypdf python -m unittest discover -s tests -v
+```
 
 ## Dependencies
 
