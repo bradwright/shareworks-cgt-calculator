@@ -125,6 +125,37 @@ class HoldingParserTests(unittest.TestCase):
         self.assertEqual(result["closing_shares"], "17.679174")
         self.assertEqual(result["closing_date"], "2025-04-04")
 
+    def test_pdf_snapshots_with_a_blank_valuation_cell(self) -> None:
+        text = (
+            "$0.00 USD $10.00 USD0.000000$0.00 USD Opening Value01-Jan-2024\n"
+            "$0.00 USD $12.00 USD0.000000$0.00 USD Closing Value31-Dec-2024\n"
+        )
+
+        result = extractor.parse_pdf_holding_summary(text)
+
+        self.assertEqual(result["opening_shares"], "0")
+        self.assertEqual(result["opening_date"], "2024-01-01")
+        self.assertEqual(result["closing_shares"], "0")
+        self.assertEqual(result["closing_date"], "2024-12-31")
+        # Plain text cannot locate the blank optional valuation cell.
+        self.assertNotIn("opening_market_value_usd", result)
+        self.assertNotIn("opening_book_value_usd", result)
+        self.assertNotIn("opening_share_price_usd", result)
+
+    def test_pdf_blank_valuation_does_not_hide_malformed_snapshots(self) -> None:
+        for values in [
+            "$0.00 USD $10.00 USDunknown$0.00 USD",
+            "$0.00 USD $10.00 USD$0.00 USD",
+            "$0.00 USD unexpected $10.00 USD0.000000$0.00 USD",
+        ]:
+            with self.subTest(values=values):
+                result = extractor.parse_pdf_holding_summary(
+                    f"{values} Opening Value01-Jan-2024\n"
+                )
+
+                self.assertEqual(result["opening_snapshot_count"], "1")
+                self.assertNotIn("opening_shares", result)
+
     def test_duplicate_pdf_snapshots_are_ambiguous(self) -> None:
         result = extractor.parse_pdf_holding_summary(
             PDF_HOLDING_TEXT
@@ -352,6 +383,70 @@ class ActivityReconciliationTests(unittest.TestCase):
         self.assertEqual(report_metadata["rsu_activity_candidate_count"], "1")
         self.assertEqual(result["status"], "ok")
         self.assertEqual(result["calculated_closing_shares"], "0")
+
+    def test_pdf_repeated_split_holdings_headers_are_not_movements(self) -> None:
+        text = PDF_ACTIVITY_TEXT.replace(
+            "$-15.00 USD$10.00 USD-1.500000 EmployeeSale",
+            "Page 2\n\nMarket\nValue\n"
+            "Book ValueShare PriceNumber of SharesCashType of MoneyActivityEntry Date\n"
+            "$-15.00 USD$10.00 USD-1.500000 EmployeeSale",
+        )
+        report_metadata = self.activity_metadata(text)
+
+        result = extractor.build_activity_reconciliation(
+            report_metadata, [release_audit(), withdrawal_audit()]
+        )
+
+        self.assertEqual(report_metadata["holding_activity_candidate_count"], "2")
+        self.assertEqual(report_metadata["holding_activity_status"], "ok")
+        self.assertEqual(result["status"], "ok")
+
+    def test_pdf_header_like_unknown_rows_are_still_blocking(self) -> None:
+        for unknown in ["Market transfer 1", "Value adjustment 1", "Market Value transfer 1"]:
+            with self.subTest(unknown=unknown):
+                text = PDF_ACTIVITY_TEXT.replace(
+                    "$-15.00 USD$10.00 USD-1.500000 EmployeeSale",
+                    f"{unknown}\n$-15.00 USD$10.00 USD-1.500000 EmployeeSale",
+                )
+                result = extractor.parse_pdf_holding_activity(text)
+
+                self.assertEqual(result["holding_activity_candidate_count"], "3")
+                self.assertIn("unsupported", result["holding_activity_status"])
+
+    def test_pdf_wrapped_rsu_grant_and_release_match_details(self) -> None:
+        text = PDF_ACTIVITY_TEXT.replace(
+            "2024-1-QEG-RSURelease", "2024-1-Acq-EP-\nRSU\nRelease"
+        )
+        report_metadata = self.activity_metadata(text)
+
+        result = extractor.build_activity_reconciliation(
+            report_metadata, [release_audit(), withdrawal_audit()]
+        )
+
+        self.assertEqual(report_metadata["rsu_activity_candidate_count"], "1")
+        self.assertEqual(report_metadata["rsu_activity_status"], "ok")
+        self.assertEqual(
+            extractor.decode_activity_events(report_metadata, "rsu_activity"),
+            [{"type": "Release", "id": "REL1", "date": "2024-01-01", "quantity": "2"}],
+        )
+        self.assertEqual(result["status"], "ok")
+
+    def test_pdf_malformed_wrapped_releases_are_still_blocking(self) -> None:
+        wrapped_text = PDF_ACTIVITY_TEXT.replace(
+            "2024-1-QEG-RSURelease", "2024-1-Acq-EP-\nRSU\nRelease"
+        )
+        for broken_text in [
+            wrapped_text.replace("RSU\nRelease", "RSU\nunknown\nRelease"),
+            wrapped_text.replace("(REL1)\n", "\n"),
+            wrapped_text.replace("01-Jan-2024\n0.000000", "unknown\n0.000000"),
+            wrapped_text.replace("-2.000000", "2.000000"),
+        ]:
+            with self.subTest(text=broken_text):
+                result = extractor.parse_pdf_rsu_activity(broken_text)
+
+                self.assertEqual(result["rsu_activity_candidate_count"], "1")
+                self.assertIn("unparseable", result["rsu_activity_status"])
+                self.assertEqual(extractor.decode_activity_events(result, "rsu_activity"), [])
 
     def test_offsetting_activity_still_requires_detail_sections(self) -> None:
         result = extractor.build_activity_reconciliation(self.activity_metadata(), [])

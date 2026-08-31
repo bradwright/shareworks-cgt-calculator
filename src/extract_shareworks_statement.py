@@ -316,23 +316,25 @@ def parse_pdf_holding_summary(text: str) -> dict[str, str]:
 
         matching_line = next(line for line in text.splitlines() if label in line)
 
-        match = re.search(
-            rf"\$(?P<market_value>{NUMBER_RE})\s*USD\s*"
-            rf"\$(?P<book_value>{NUMBER_RE})\s*USD\s*"
-            rf"\$(?P<share_price>{NUMBER_RE})\s*USD\s*"
+        match = re.fullmatch(
+            rf"(?P<valuations>(?:\${NUMBER_RE}\s*USD\s*){{2,3}})"
             rf"(?P<shares>{NUMBER_RE})\s*"
             rf"\$(?P<cash>{NUMBER_RE})\s*USD\s*"
             rf"{re.escape(label)}\s*(?P<date>{DATE_RE})",
-            matching_line,
+            matching_line.strip(),
         )
         if not match:
             continue
 
         summary[f"{prefix}_shares"] = fmt_decimal(parse_decimal(match.group("shares")))
         summary[f"{prefix}_date"] = parse_short_date(match.group("date"))
-        summary[f"{prefix}_market_value_usd"] = fmt_money(parse_decimal(match.group("market_value")))
-        summary[f"{prefix}_book_value_usd"] = fmt_money(parse_decimal(match.group("book_value")))
-        summary[f"{prefix}_share_price_usd"] = fmt_decimal(parse_decimal(match.group("share_price")))
+        valuations = re.findall(rf"\$({NUMBER_RE})\s*USD", match.group("valuations"))
+        # Some snapshots have a blank valuation cell. Shares/date remain explicit,
+        # but plain text cannot identify the missing cell, so do not infer values.
+        if len(valuations) == 3:
+            summary[f"{prefix}_market_value_usd"] = fmt_money(parse_decimal(valuations[0]))
+            summary[f"{prefix}_book_value_usd"] = fmt_money(parse_decimal(valuations[1]))
+            summary[f"{prefix}_share_price_usd"] = fmt_decimal(parse_decimal(valuations[2]))
     return summary
 
 
@@ -519,11 +521,13 @@ def parse_pdf_holding_activity(text: str) -> dict[str, str]:
         rf"(?:\s*\((?P<id>[^)]+)\))?"
         rf"(?P<date>{DATE_RE})\s*$"
     )
+    header_tail = "Book ValueShare PriceNumber of SharesCashType of MoneyActivityEntry Date"
+    header_lines = {"Activity", "Market", "Value", header_tail, "Market Value" + header_tail}
     for raw_line in lines[opening_indexes[0] + 1 : closing_indexes[0]]:
         line = raw_line.strip()
         if not line or re.fullmatch(r"Page \d+", line):
             continue
-        if line == "Activity" or line.startswith("Market Value") or line.startswith("Fund:"):
+        if line in header_lines or line.startswith("Fund:"):
             continue
 
         match = movement_pattern.fullmatch(line)
@@ -603,7 +607,12 @@ def parse_pdf_rsu_activity(text: str) -> dict[str, str]:
         rf"^(?P<values>.*?)(?P<grant>\d{{4}}-[A-Za-z0-9-]+-RSU)Release\s*$"
     )
     for index in candidate_indexes:
-        release_match = release_pattern.fullmatch(block[index].strip())
+        release_text = block[index].strip()
+        # Long grant names can wrap before RSU, with Release on its own line.
+        # Join only this adjacent layout, never scan back across other records.
+        if release_text == "Release" and index >= 2 and block[index - 1].strip() == "RSU":
+            release_text = block[index - 2].strip() + "RSURelease"
+        release_match = release_pattern.fullmatch(release_text)
         id_match = (
             re.fullmatch(r"\(([^)]+)\)\s*", block[index + 1].strip())
             if index + 1 < len(block)
