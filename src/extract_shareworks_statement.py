@@ -81,25 +81,14 @@ def parse_decimal(value: str) -> Decimal:
 def fmt_decimal(value: Decimal | None) -> str:
     if value is None:
         return ""
-    return format(value, "f").rstrip("0").rstrip(".") if "." in format(value, "f") else format(value, "f")
+    formatted = format(value, "f")
+    return formatted.rstrip("0").rstrip(".") if "." in formatted else formatted
 
 
 def fmt_money(value: Decimal | None) -> str:
     if value is None:
         return ""
     return f"{value.quantize(Decimal('0.01'))}"
-
-
-def fmt_rate(value: Decimal | None) -> str:
-    if value is None:
-        return ""
-    return format(value, "f").rstrip("0").rstrip(".")
-
-
-def fmt_calculated(value: Decimal | None) -> str:
-    if value is None:
-        return ""
-    return format(value, "f").rstrip("0").rstrip(".")
 
 
 def fixed(value: Decimal | str, places: int) -> str:
@@ -264,7 +253,7 @@ def fetch_frankfurter_rate(lookup_date: str) -> dict[str, str]:
         raise RuntimeError(f"Unable to fetch FX rate for {lookup_date}") from last_error
     return {
         "requested_date": lookup_date,
-        "rate": fmt_rate(payload["rates"]["GBP"]),
+        "rate": fmt_decimal(payload["rates"]["GBP"]),
         "rate_date": payload["date"],
         "source": "Frankfurter USD->GBP",
         "url": url,
@@ -305,9 +294,9 @@ def apply_derived_values(rows: list[dict[str, str]]) -> None:
         usd_fees = parse_decimal(row["USD Fees"]) if row["USD Fees"] else Decimal("0")
         fx_rate = parse_decimal(row["FX Rate"])
 
-        row["Running total"] = fmt_calculated(running_total)
-        row["GBP Price"] = fmt_calculated(usd_price * fx_rate)
-        row["GBP Fees"] = fmt_calculated(usd_fees * fx_rate)
+        row["Running total"] = fmt_decimal(running_total)
+        row["GBP Price"] = fmt_decimal(usd_price * fx_rate)
+        row["GBP Fees"] = fmt_decimal(usd_fees * fx_rate)
         row["CGT Calculator String"] = (
             ("B" if row["Type"] == "Release" else "S")
             + f" {format_cgt_date(row['Date'])}"
