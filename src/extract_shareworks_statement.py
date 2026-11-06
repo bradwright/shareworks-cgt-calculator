@@ -91,15 +91,11 @@ def fmt_money(value: Decimal | None) -> str:
 
 
 def fmt_rate(value: Decimal | None) -> str:
-    if value is None:
-        return ""
-    return format(value, "f").rstrip("0").rstrip(".")
+    return fmt_decimal(value)
 
 
 def fmt_calculated(value: Decimal | None) -> str:
-    if value is None:
-        return ""
-    return format(value, "f").rstrip("0").rstrip(".")
+    return fmt_decimal(value)
 
 
 def fixed(value: Decimal | str, places: int) -> str:

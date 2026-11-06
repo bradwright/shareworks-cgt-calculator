@@ -145,6 +145,16 @@ The script declares its dependency inline using PEP 723 script metadata:
 
 `uv run src/extract_shareworks_statement.py ...` reads that metadata and creates the required environment automatically.
 
+## Tests
+
+Run the decimal-formatting and derived-value regression tests:
+
+```bash
+uv run tests/test_extract_shareworks_statement.py
+```
+
+These tests use synthetic transactions and do not require network access once dependencies are installed.
+
 ## Appendix: Google Sheets
 
 The extractor does not contain Google API credentials, Google client dependencies, or upload logic. If you want the output in Google Sheets, use one of these workflows:
